@@ -3,23 +3,21 @@ use std::rc::Rc;
 use gtk4::prelude::*;
 use super::{CLIPBOARD, create_menu_popover, create_menu_button};
 
-pub fn show_for_file(
-    parent: &gtk4::Widget,
-    x: f64,
-    y: f64,
+/// Renders the standard context menu for files/directories outside the Trash.
+pub fn show_for_file_normal(
+    popover: &gtk4::Popover,
+    vbox: &gtk4::Box,
     target_paths: Vec<PathBuf>,
     current_path: PathBuf,
     nav_callback: Rc<dyn Fn(PathBuf)>,
 ) {
-    let (popover, vbox) = create_menu_popover(parent, x, y);
-
     // Create buttons
-    let btn_open = create_menu_button("Open", "document-open");
-    let btn_cut = create_menu_button("Cut", "edit-cut");
-    let btn_copy = create_menu_button("Copy", "edit-copy");
-    let btn_rename = create_menu_button("Rename", "edit-clear"); // standard rename fallback
-    let btn_trash = create_menu_button("Move to Trash", "user-trash");
-    let btn_delete = create_menu_button("Delete Permanently", "edit-delete");
+    let btn_open = create_menu_button("Open", "folder-new");
+    let btn_cut = create_menu_button("Cut", "cut");
+    let btn_copy = create_menu_button("Copy", "copy");
+    let btn_rename = create_menu_button("Rename", "rename");
+    let btn_trash = create_menu_button("Move to Trash", "trash");
+    let btn_delete = create_menu_button("Delete Permanently", "trash");
 
     vbox.append(&btn_open);
     vbox.append(&btn_cut);
@@ -122,73 +120,51 @@ pub fn show_for_file(
         });
     });
 
-    popover.popup();
-}
+    // Custom Context Options
+    let settings = babydra_common::load_explore_settings();
+    if !settings.custom_context_items.is_empty() {
+        let sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+        sep.add_css_class("menu-sep");
+        vbox.append(&sep);
 
-pub fn show_for_empty(
-    parent: &gtk4::Widget,
-    x: f64,
-    y: f64,
-    current_path: PathBuf,
-    nav_callback: Rc<dyn Fn(PathBuf)>,
-) {
-    let (popover, vbox) = create_menu_popover(parent, x, y);
+        for item in settings.custom_context_items {
+            let icon_key = if item.name.to_lowercase().contains("terminal") {
+                "terminal"
+            } else {
+                "settings"
+            };
+            let btn_custom = create_menu_button(&item.name, icon_key);
+            vbox.append(&btn_custom);
 
-    let btn_new_folder = create_menu_button("New Folder", "folder-new");
-    let btn_paste = create_menu_button("Paste", "edit-paste");
+            let pop_c = popover.clone();
+            let command_tmpl = item.command.clone();
+            let target_paths_c = target_paths.clone();
+            btn_custom.connect_clicked(move |_| {
+                pop_c.popdown();
+                let command_tmpl_c = command_tmpl.clone();
+                let paths = target_paths_c.clone();
+                for path in paths {
+                    let path_str = path.to_string_lossy().to_string();
+                    let parent_str = path.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "".to_string());
+                    let name_str = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    let stem_str = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                    let ext_str = path.extension().map(|e| e.to_string_lossy().to_string()).unwrap_or_default();
 
-    vbox.append(&btn_new_folder);
-    vbox.append(&btn_paste);
-
-    // Check clipboard state for paste sensitivity
-    let clipboard_data = CLIPBOARD.with(|cb| cb.borrow().clone());
-    btn_paste.set_sensitive(clipboard_data.is_some());
-
-    // Paste action implementation
-    let pop_c = popover.clone();
-    let dest_dir = current_path.clone();
-    let nav = nav_callback.clone();
-    let current_p = current_path.clone();
-    btn_paste.connect_clicked(move |_| {
-        pop_c.popdown();
-        if let Some((sources, is_cut)) = clipboard_data.clone() {
-            let nav_f = nav.clone();
-            let cp_f = current_p.clone();
-            let dest_dir_c = dest_dir.clone();
-            glib::spawn_future_local(async move {
-                let mut all_success = true;
-                for src in sources {
-                    if let Some(filename) = src.file_name() {
-                        let dest = dest_dir_c.join(filename);
-                        if is_cut {
-                            if let Err(e) = babydra_common::move_path(src, dest).await {
-                                eprintln!("Failed to move file: {}", e);
-                                all_success = false;
-                            }
-                        } else {
-                            if let Err(e) = babydra_common::copy_path(src, dest).await {
-                                eprintln!("Failed to copy file: {}", e);
-                                all_success = false;
-                            }
-                        }
-                    }
+                    let cmd_str = command_tmpl_c
+                        .replace("{path}", &path_str)
+                        .replace("{dir}", &parent_str)
+                        .replace("{name}", &name_str)
+                        .replace("{stem}", &stem_str)
+                        .replace("{ext}", &ext_str);
+                    
+                    let _ = std::process::Command::new("sh")
+                        .arg("-c")
+                        .arg(&cmd_str)
+                        .spawn();
                 }
-                if is_cut && all_success {
-                    CLIPBOARD.with(|cb| cb.replace(None)); // Clear clipboard on cut
-                }
-                nav_f(cp_f);
             });
         }
-    });
-
-    // New folder action
-    let pop_c = popover.clone();
-    let nav = nav_callback.clone();
-    let current_p = current_path.clone();
-    btn_new_folder.connect_clicked(move |_| {
-        pop_c.popdown();
-        crate::explore::dialogs::show_new_folder_dialog(current_p.clone(), nav.clone());
-    });
+    }
 
     popover.popup();
 }
