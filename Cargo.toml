@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/babydra-core",
+    "crates/babydra-theme",
+    "crates/babydra-ui-kit",
+    "crates/babydra-island",
+]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+
+[workspace.dependencies]
+babydra-core = { path = "crates/babydra-core" }
+babydra-island = { path = "crates/babydra-island" }
+babydra-theme = { path = "crates/babydra-theme" }
+babydra-ui-kit = { path = "crates/babydra-ui-kit" }
+babydra-icons = { git = "https://github.com/i4104-vn/babydra-icons.git", tag = "v1.0.0" }
+
+gtk4 = { version = "0.9", features = ["v4_10"] }
+gtk4-layer-shell = "0.4"
+glib = "0.20"
+gio = "0.20"
+gdk4 = "0.9"
+gdk-pixbuf = "0.20"
+cairo-rs = { version = "0.20", features = ["use_glib", "png"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "time", "sync", "macros", "process", "fs", "io-util"] }
+chrono = "0.4"
+thiserror = "2.0"
+trash = "3.0"
+dirs = "5.0"
+rayon = "1.10"
+tracing = "0.1"
+evdev = { version = "0.12", features = ["tokio"] }
+toml = "0.8"
+kamadak-exif = "0.5"
+syntect = "5.2"

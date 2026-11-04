@@ -1,0 +1,234 @@
+//! Theme and styling system coordinator.
+//!
+//! Loads shared structural styles and app-provided styles, then resolves the
+//! active theme package (`themes/<id>`) through the `babydra-theme` engine.
+//!
+//! Theme selection comes from `~/.babydra/babydra.conf` (`theme.selection`);
+//! an empty `id` selects the engine default theme (`babydra-default`).
+
+pub mod colors;
+
+macro_rules! include_style {
+    ($path:expr) => {
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/styles/shared/",
+            $path
+        ))
+    };
+}
+
+/// Shared structural stylesheet — layout, spacing, component structure.
+/// Color values live in theme packages (`themes/<id>/`), not here.
+const SHARED_CSS: &str = concat!(
+    include_style!("panel/panel.css"),
+    "\n",
+    include_style!("panel/workspaces.css"),
+    "\n",
+    include_style!("panel/clock.css"),
+    "\n",
+    include_style!("panel/status.css"),
+    "\n",
+    include_style!("panel/system_monitor.css"),
+    "\n",
+    include_style!("panel/tray.css"),
+    "\n",
+    include_style!("panel/taskbar.css"),
+    "\n",
+    include_style!("control_center/control_center.css"),
+    "\n",
+    include_style!("control_center/power.css"),
+    "\n",
+    include_style!("island/system_island.css"),
+    "\n",
+    "\n",
+    include_style!("launcher/launcher.css"),
+    "\n",
+    include_style!("calendar/calendar.css"),
+    "\n",
+    include_style!("shared/button.css"),
+    "\n",
+    include_style!("shared/card.css"),
+    "\n",
+    include_style!("shared/input.css"),
+    "\n",
+    include_style!("shared/sidebar.css"),
+    "\n",
+    include_style!("shared/dialog.css"),
+    "\n",
+    include_style!("shared/scrollbar.css")
+);
+
+thread_local! {
+    static CSS_PROVIDER: gtk4::CssProvider = gtk4::CssProvider::new();
+    static APP_CSS: std::cell::Cell<&'static str> = const { std::cell::Cell::new("") };
+}
+
+use gio::prelude::*;
+
+/// Resolves the color layers for the active theme + mode.
+///
+/// Returns `(dark_css, light_css, extra_layer)` — the caller picks the
+/// dark/light side based on the current mode and appends the extra layer.
+fn resolve_theme_layers(theme_id: &str) -> (String, String, String) {
+    let id = if theme_id.is_empty() {
+        "babydra-default"
+    } else {
+        theme_id
+    };
+
+    let theme = match babydra_theme::resolve_theme(id) {
+        Ok(t) => t,
+        Err(err) => {
+            tracing::warn!(
+                target: "babydra-ui-kit",
+                "theme '{id}' failed to resolve ({err}); falling back to babydra-default"
+            );
+            match babydra_theme::resolve_theme("babydra-default") {
+                Ok(t) => t,
+                Err(err2) => {
+                    tracing::error!(
+                        target: "babydra-ui-kit",
+                        "no theme package available ({err2}); loading structural CSS only"
+                    );
+                    return (String::new(), String::new(), String::new());
+                }
+            }
+        }
+    };
+
+    (theme.dark_css, theme.light_css, theme.css_layer)
+}
+
+/// Builds the full CSS string for the current mode.
+///
+/// Dark mode preference precedence: `theme.selection.dark` from config wins
+/// when set (`Some`), otherwise falls back to the GSettings system scheme.
+fn build_css() -> String {
+    let selection = babydra_core::config::load_babydra_config().theme.selection;
+    let is_dark = selection.dark.unwrap_or_else(is_dark_mode);
+    let (dark_css, light_css, extra_layer) = resolve_theme_layers(&selection.id);
+    let color_layer = if is_dark { dark_css } else { light_css };
+    let app_css = APP_CSS.with(std::cell::Cell::get);
+    let css = format!("{SHARED_CSS}\n{app_css}\n{color_layer}\n{extra_layer}");
+    css.replace("\r", "")
+}
+
+/// Initializes the GtkCssProvider, registers it with the GdkDisplay,
+/// and loads the shared structural CSS + the active theme package layers.
+pub fn init_theme() {
+    if let Some(settings) = gtk4::Settings::default() {
+        let gsettings = gio::Settings::new("org.gnome.desktop.interface");
+        let value = gsettings.string("color-scheme");
+        let is_dark = value != "prefer-light";
+        settings.set_gtk_application_prefer_dark_theme(is_dark);
+
+        let user_icon_theme = gsettings.string("icon-theme");
+        let user_icon_theme = user_icon_theme.trim();
+        settings.set_gtk_icon_theme_name(Some(user_icon_theme));
+
+        crate::ui::icon::resolver::ensure_embedded_logo_installed();
+
+        if let Some(display) = gtk4::gdk::Display::default() {
+            let icon_theme = gtk4::IconTheme::for_display(&display);
+            let home = glib::home_dir();
+            let local_path = home.join(".local/share/icons");
+            if local_path.exists() {
+                icon_theme.add_search_path(local_path);
+            }
+            let local_pixmaps = home.join(".local/share/pixmaps");
+            if local_pixmaps.exists() {
+                icon_theme.add_search_path(local_pixmaps);
+            }
+            icon_theme.add_search_path("/usr/share/icons");
+            icon_theme.add_search_path("/usr/share/pixmaps");
+        }
+    }
+
+    CSS_PROVIDER.with(|provider| {
+        thread_local! {
+            static REGISTERED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        }
+
+        let is_registered = REGISTERED.with(|r| r.get());
+        if !is_registered {
+            if let Some(display) = gtk4::gdk::Display::default() {
+                gtk4::style_context_add_provider_for_display(
+                    &display,
+                    provider,
+                    gtk4::STYLE_PROVIDER_PRIORITY_USER,
+                );
+            }
+
+            let gsettings = gio::Settings::new("org.gnome.desktop.interface");
+
+            let gsettings_c = gsettings.clone();
+            gsettings.connect_changed(Some("color-scheme"), move |_, _| {
+                let value = gsettings_c.string("color-scheme");
+                let dark = value != "prefer-light";
+                if let Some(settings) = gtk4::Settings::default() {
+                    settings.set_gtk_application_prefer_dark_theme(dark);
+                }
+                let _ = babydra_core::sync_labwc_titlebar_theme(dark);
+                let _ = babydra_core::sync_kitty_theme(dark);
+            });
+
+            let gsettings_c2 = gsettings.clone();
+            gsettings.connect_changed(Some("icon-theme"), move |_, _| {
+                let user_icon_theme = gsettings_c2.string("icon-theme");
+                let user_icon_theme = user_icon_theme.trim();
+                if let Some(settings) = gtk4::Settings::default() {
+                    settings.set_gtk_icon_theme_name(Some(user_icon_theme));
+                }
+            });
+
+            if let Some(settings) = gtk4::Settings::default() {
+                let provider_clone = provider.clone();
+                settings.connect_gtk_application_prefer_dark_theme_notify(move |_s| {
+                    let css = build_css();
+                    provider_clone.load_from_data(&css);
+                });
+            }
+
+            REGISTERED.with(|r| r.set(true));
+        }
+
+        let css = build_css();
+        provider.load_from_data(&css);
+    });
+}
+
+/// Initializes the shared theme with stylesheet rules owned by one app.
+/// Repeated calls to `init_theme` keep these app styles active across theme
+/// changes without putting app-specific selectors back into the UI kit.
+pub fn init_theme_with_css(app_css: &'static str) {
+    APP_CSS.with(|css| css.set(app_css));
+    init_theme();
+}
+
+/// Helper stub for backward compatibility.
+#[inline]
+pub fn apply_theme_class(_window: &gtk4::ApplicationWindow) {
+    // stub — theme is applied globally via init_theme()
+}
+
+/// Checks if dark mode is preferred in GSettings.
+pub fn is_dark_mode() -> bool {
+    gtk4::Settings::default()
+        .map(|s| s.is_gtk_application_prefer_dark_theme())
+        .unwrap_or(true)
+}
+
+/// Sets the color scheme preference in GSettings.
+pub fn set_dark_mode(dark: bool) {
+    std::thread::spawn(move || {
+        let _ = babydra_core::services::system::set_color_scheme(dark);
+
+        gtk4::glib::idle_add_once(move || {
+            if let Some(settings) = gtk4::Settings::default() {
+                settings.set_gtk_application_prefer_dark_theme(dark);
+            }
+            init_theme();
+        });
+    });
+}
