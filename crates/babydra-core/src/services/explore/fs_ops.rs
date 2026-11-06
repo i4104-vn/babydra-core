@@ -84,109 +84,111 @@ pub fn get_icon_name(path: &Path, is_dir: bool, mime: &str) -> String {
     }
 }
 
+/// Loads directory contents synchronously.
+pub fn load_directory_sync(
+    path: PathBuf,
+    show_hidden: bool,
+) -> Result<Vec<FileEntry>, std::io::Error> {
+    let entries = fs::read_dir(&path)?;
+    let mut file_entries = Vec::new();
+
+    for entry in entries {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy().into_owned();
+
+        let is_hidden = name_str.starts_with('.');
+        if is_hidden && !show_hidden {
+            continue;
+        }
+
+        let entry_path = entry.path();
+        let sym_meta = match std::fs::symlink_metadata(&entry_path) {
+            Ok(meta) => meta,
+            Err(_) => continue,
+        };
+
+        let is_symlink = sym_meta.file_type().is_symlink();
+        let metadata = if is_symlink {
+            match std::fs::metadata(&entry_path) {
+                Ok(meta) => meta,
+                Err(_) => sym_meta.clone(),
+            }
+        } else {
+            sym_meta.clone()
+        };
+
+        let mut final_path = entry_path.clone();
+        if is_symlink {
+            if let Ok(target) = std::fs::canonicalize(&entry_path) {
+                final_path = target;
+            }
+        }
+
+        let file_type = if metadata.is_dir() {
+            FileType::Directory
+        } else if metadata.is_file() {
+            FileType::RegularFile
+        } else if metadata.is_symlink() {
+            FileType::Symlink
+        } else {
+            FileType::Unknown
+        };
+
+        let mime_type = if metadata.is_dir() {
+            "inode/directory".to_string()
+        } else {
+            from_path(&entry_path).first_or_octet_stream().to_string()
+        };
+
+        let mut icon_name = get_icon_name(&entry_path, metadata.is_dir(), &mime_type);
+        let mut display_name = name_str.clone();
+
+        if file_type == FileType::RegularFile
+            && entry_path
+                .extension()
+                .map(|e| e == "desktop")
+                .unwrap_or(false)
+        {
+            if let Some(app) = crate::services::apps::parse_desktop_file(&entry_path) {
+                display_name = app.name;
+                if let Some(app_icon) = app.icon {
+                    icon_name = app_icon;
+                }
+            }
+        }
+
+        let (owner, group) = get_owner_group(&metadata);
+
+        file_entries.push(FileEntry {
+            path: final_path,
+            name,
+            display_name,
+            file_type,
+            mime_type,
+            size: metadata.len(),
+            modified: metadata.modified().ok(),
+            created: metadata.created().ok(),
+            permissions: metadata.mode(),
+            owner,
+            group,
+            is_hidden,
+            icon_name,
+            thumbnail_path: None,
+        });
+    }
+
+    Ok(file_entries)
+}
+
 /// Loads a directory contents asynchronously.
 pub async fn load_directory(
     path: PathBuf,
     show_hidden: bool,
 ) -> Result<Vec<FileEntry>, std::io::Error> {
-    tokio::task::spawn_blocking(move || {
-        let entries = fs::read_dir(&path)?;
-        let mut file_entries = Vec::new();
-
-        for entry in entries {
-            let entry = entry?;
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy().into_owned();
-
-            let is_hidden = name_str.starts_with('.');
-            if is_hidden && !show_hidden {
-                continue;
-            }
-
-            let entry_path = entry.path();
-            let sym_meta = match std::fs::symlink_metadata(&entry_path) {
-                Ok(meta) => meta,
-                Err(_) => continue,
-            };
-
-            let is_symlink = sym_meta.file_type().is_symlink();
-            let metadata = if is_symlink {
-                match std::fs::metadata(&entry_path) {
-                    Ok(meta) => meta,
-                    Err(_) => sym_meta.clone(),
-                }
-            } else {
-                sym_meta.clone()
-            };
-
-            let mut final_path = entry_path.clone();
-            if is_symlink {
-                if let Ok(target) = std::fs::canonicalize(&entry_path) {
-                    final_path = target;
-                }
-            }
-
-            let file_type = if metadata.is_dir() {
-                FileType::Directory
-            } else if metadata.is_file() {
-                FileType::RegularFile
-            } else if metadata.is_symlink() {
-                FileType::Symlink
-            } else {
-                FileType::Unknown
-            };
-
-            let mime_type = if metadata.is_dir() {
-                "inode/directory".to_string()
-            } else {
-                from_path(&entry_path).first_or_octet_stream().to_string()
-            };
-
-            let mut icon_name = get_icon_name(&entry_path, metadata.is_dir(), &mime_type);
-            let mut display_name = name_str.clone();
-
-            if file_type == FileType::RegularFile
-                && entry_path
-                    .extension()
-                    .map(|e| e == "desktop")
-                    .unwrap_or(false)
-            {
-                if let Some(app) = crate::services::apps::parse_desktop_file(&entry_path) {
-                    display_name = app.name;
-                    if let Some(app_icon) = app.icon {
-                        icon_name = app_icon;
-                    }
-                }
-            }
-
-            let (owner, group) = get_owner_group(&metadata);
-
-            file_entries.push(FileEntry {
-                path: final_path,
-                name,
-                display_name,
-                file_type,
-                mime_type,
-                size: metadata.len(),
-                modified: metadata.modified().ok(),
-                created: metadata.created().ok(),
-                permissions: metadata.mode(),
-                owner,
-                group,
-                is_hidden,
-                icon_name,
-                thumbnail_path: None,
-            });
-        }
-
-        Ok(file_entries)
-    })
-    .await
-    .unwrap_or_else(|e| {
-        Err(std::io::Error::other(
-            e.to_string(),
-        ))
-    })
+    tokio::task::spawn_blocking(move || load_directory_sync(path, show_hidden))
+        .await
+        .unwrap_or_else(|e| Err(std::io::Error::other(e.to_string())))
 }
 
 /// Helper to recursively copy directories with infinite cycle protection.

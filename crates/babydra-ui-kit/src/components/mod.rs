@@ -44,8 +44,9 @@ pub use lists::{create_action_row, ActionRow, ListGroup};
 pub use navigation::{HeaderBar, SidebarLayout};
 pub use overlays::DialogBuilder;
 pub use modals::{
-    ChangeHostnameDialog, ChangeNameDialog, ChangePasswordDialog, PasswordDialog, VpnConfigDialog,
-    VpnLogDialog, WifiConfigDialog, WifiInfoDialog, WifiPasswordDialog,
+    show_file_chooser_dialog, ChangeHostnameDialog, ChangeNameDialog, ChangePasswordDialog,
+    PasswordDialog, VpnConfigDialog, VpnLogDialog, WifiConfigDialog, WifiInfoDialog,
+    WifiPasswordDialog,
 };
 pub use placeholder::{create_placeholder, create_placeholder_box, PlaceholderState};
 pub use popovers::{create_popover, TooltipPopover, TooltipRow};

@@ -70,6 +70,13 @@ pub use services::system::volume::{self, get_audio_backend, AudioBackendType, Au
 pub use services::system::vpn::{self, get_vpn_connections, VpnConn};
 pub use services::system::wifi;
 
+// --- File Dialog Service ---
+pub use services::file_dialog::{
+    self, find_matching_place, get_default_places, matches_filter, matches_pattern,
+    start_portal_service, FileChooserPortalService, FileDialogMode, FileDialogOptions,
+    FileDialogResult, FileFilter, PortalDialogRequest, QuickAccessPlace,
+};
+
 // --- Window & App Management ---
 pub use services::app_lifecycle::{init_app, AppLifecycle};
 pub use services::apps::{find_desktop_apps, refresh_desktop_apps, DesktopApp};

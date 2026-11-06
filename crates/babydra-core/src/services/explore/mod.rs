@@ -17,7 +17,7 @@ pub use dir_size::calc_dir_size;
 pub use filter::filter_entries;
 pub use fs_ops::{
     copy_path, create_dir, create_empty_file, delete_path, get_icon_name, get_owner_group,
-    load_directory, move_path, rename_path, restore_from_trash, send_to_trash,
+    load_directory, load_directory_sync, move_path, rename_path, restore_from_trash, send_to_trash,
 };
 pub use launcher::{show_in_file_manager, spawn_explore_window, try_open_in_running_instance};
 pub use path::{resolve_target_from_path, resolve_target_from_uri, sanitize_path};

@@ -1,11 +1,14 @@
 pub mod account_dialogs;
 pub mod dialog_builder;
+pub mod file_chooser;
 pub mod password_dialog;
 pub mod vpn_config_dialog;
 pub mod vpn_log_dialog;
 pub mod wifi_config_dialog;
 pub mod wifi_info_dialog;
 pub mod wifi_password_dialog;
+
+pub use file_chooser::show_file_chooser_dialog;
 
 pub use account_dialogs::{ChangeHostnameDialog, ChangeNameDialog, ChangePasswordDialog};
 pub use dialog_builder::{

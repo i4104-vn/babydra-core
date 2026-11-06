@@ -39,7 +39,7 @@ pub mod prelude {
         create_switch_card, create_switch_row, create_sys_wifi_icon, create_title,
         create_toggle_tile, create_vpn_icon, create_wifi_icon, create_wifi_net_icon,
         create_wp_thumb, create_loading_card, create_loading_icon, create_loading_placeholder_row,
-        render_wifi_svg, show_tray_menu, update_toggle_state,
+        render_wifi_svg, show_file_chooser_dialog, show_tray_menu, update_toggle_state,
         ChangeHostnameDialog, ChangeNameDialog, ChangePasswordDialog, ContextMenuBuilder,
         CustomSlider, CustomSwitch, PasswordDialog, PillSlider, PlaceholderState, ToggleRow,
         TooltipPopover, TooltipRow, VpnConfigDialog, VpnLogDialog, WifiConfigDialog,

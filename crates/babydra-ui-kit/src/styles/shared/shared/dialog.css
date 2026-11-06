@@ -433,3 +433,145 @@ button.modern-dialog-danger-btn:disabled,
     background: linear-gradient(135deg, #34d399, #10b981);
     box-shadow: none;
 }
+
+/* ── 8. BabyDra Modern File Chooser Dialog ── */
+window.file-chooser-window,
+.file-chooser-window {
+    border-radius: 16px;
+    background-color: rgba(22, 25, 38, 0.98);
+}
+
+.file-chooser-title {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.file-chooser-nav-row {
+    padding: 4px 0;
+}
+
+.file-chooser-breadcrumbs {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 2px 6px;
+}
+
+.file-chooser-breadcrumb-btn {
+    border: none;
+    box-shadow: none;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background-color 0.15s ease;
+}
+
+.file-chooser-breadcrumb-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.file-chooser-breadcrumb-sep {
+    font-size: 14px;
+    opacity: 0.4;
+    padding: 0 2px;
+}
+
+.file-chooser-search {
+    border-radius: 8px;
+    font-size: 13px;
+    padding: 4px 8px;
+}
+
+.file-chooser-sidebar-scroll {
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.file-chooser-sidebar-header {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.5;
+    padding: 2px 8px;
+}
+
+.file-chooser-sidebar-btn {
+    border: none;
+    box-shadow: none;
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin: 1px 0;
+    transition: background-color 0.15s ease;
+}
+
+.file-chooser-sidebar-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.file-chooser-sidebar-btn.active-nav {
+    background-color: rgba(59, 130, 246, 0.18);
+    color: #60a5fa;
+}
+
+.file-chooser-sidebar-label {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.file-chooser-list {
+    background-color: transparent;
+}
+
+.file-chooser-row {
+    border-radius: 8px;
+    margin: 1px 6px;
+    padding: 0;
+    transition: background-color 0.12s ease;
+}
+
+.file-chooser-row:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.file-chooser-row:selected {
+    background-color: rgba(59, 130, 246, 0.25);
+    color: #ffffff;
+}
+
+.file-chooser-filename {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.file-chooser-size {
+    font-size: 12px;
+    opacity: 0.6;
+}
+
+.file-chooser-date {
+    font-size: 12px;
+    opacity: 0.5;
+}
+
+.file-chooser-bottom-bar {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 10px;
+}
+
+.file-chooser-bottom-lbl {
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+.file-chooser-name-entry {
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 13px;
+}
+
+.file-chooser-filter-dropdown {
+    border-radius: 8px;
+    font-size: 13px;
+    min-width: 140px;
+}

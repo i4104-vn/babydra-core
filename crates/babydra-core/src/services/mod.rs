@@ -7,6 +7,7 @@ pub mod clock;
 pub mod config;
 pub mod exif;
 pub mod explore;
+pub mod file_dialog;
 pub mod last_user;
 pub mod logger;
 pub mod mpris;
