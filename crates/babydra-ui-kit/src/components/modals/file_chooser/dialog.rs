@@ -41,6 +41,7 @@ struct DialogState {
     show_hidden: bool,
     _view_mode: ViewMode,
     all_entries: Vec<FileEntry>,
+    current_displayed_entries: Vec<FileEntry>,
 }
 
 /// Creates and presents the BabyDra File Chooser Dialog.
@@ -65,6 +66,7 @@ pub fn show_file_chooser_dialog(
         show_hidden: options.show_hidden,
         _view_mode: ViewMode::List,
         all_entries: Vec::new(),
+        current_displayed_entries: Vec::new(),
         options,
         search_query: String::new(),
     }));
@@ -306,10 +308,12 @@ pub fn show_file_chooser_dialog(
     }
 
     let render_list: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    let nav_slot: Rc<RefCell<Option<Rc<dyn Fn(PathBuf, bool)>>>> = Rc::new(RefCell::new(None));
 
     let navigate_to: Rc<dyn Fn(PathBuf, bool)> = {
         let state = state.clone();
         let render_list = render_list.clone();
+        let nav_slot = nav_slot.clone();
         let sidebar_buttons = sidebar_buttons.clone();
         let btn_back = btn_back.clone();
         let btn_forward = btn_forward.clone();
@@ -324,20 +328,26 @@ pub fn show_file_chooser_dialog(
             if record_history {
                 let prev = state.borrow().current_path.clone();
                 if prev != target_path {
-                    state.borrow_mut().history_back.push(prev);
-                    state.borrow_mut().history_forward.clear();
+                    let mut st = state.borrow_mut();
+                    st.history_back.push(prev);
+                    st.history_forward.clear();
                 }
             }
 
-            state.borrow_mut().current_path = target_path.clone();
-            state.borrow_mut().selected_paths.clear();
+            {
+                let mut st = state.borrow_mut();
+                st.current_path = target_path.clone();
+                st.selected_paths.clear();
+            }
 
             if state.borrow().options.mode == FileDialogMode::OpenFolder {
                 file_name_entry.set_text(&target_path.to_string_lossy());
             }
 
-            btn_back.set_sensitive(!state.borrow().history_back.is_empty());
-            btn_forward.set_sensitive(!state.borrow().history_forward.is_empty());
+            let can_back = !state.borrow().history_back.is_empty();
+            let can_forward = !state.borrow().history_forward.is_empty();
+            btn_back.set_sensitive(can_back);
+            btn_forward.set_sensitive(can_forward);
 
             for (p, b) in sidebar_buttons.borrow().iter() {
                 if p == &target_path {
@@ -376,23 +386,11 @@ pub fn show_file_chooser_dialog(
                 btn_seg.set_cursor_from_name(Some("pointer"));
 
                 let target_click = path_val.clone();
-                btn_seg.connect_clicked({
-                    let state = state.clone();
-                    let render_list = render_list.clone();
-                    let btn_back = btn_back.clone();
-                    let btn_forward = btn_forward.clone();
-                    move |_| {
-                        let prev = state.borrow().current_path.clone();
-                        if prev != target_click {
-                            state.borrow_mut().history_back.push(prev);
-                            state.borrow_mut().history_forward.clear();
-                            state.borrow_mut().current_path = target_click.clone();
-                            btn_back.set_sensitive(true);
-                            btn_forward.set_sensitive(false);
-                            if let Some(ref r) = *render_list.borrow() {
-                                r();
-                            }
-                        }
+                let nav_slot = nav_slot.clone();
+                btn_seg.connect_clicked(move |_| {
+                    let nav_opt = nav_slot.borrow().clone();
+                    if let Some(nav) = nav_opt {
+                        nav(target_click.clone(), true);
                     }
                 });
                 breadcrumb_box.append(&btn_seg);
@@ -409,6 +407,8 @@ pub fn show_file_chooser_dialog(
             }
         })
     };
+
+    *nav_slot.borrow_mut() = Some(navigate_to.clone());
 
     for (place_path, btn) in sidebar_buttons.borrow().iter() {
         let path_clone = place_path.clone();
@@ -431,49 +431,56 @@ pub fn show_file_chooser_dialog(
                 list_box.remove(&ch);
             }
 
-            let st = state.borrow();
-            let show_hidden = st.show_hidden;
-            let query = st.search_query.to_lowercase();
-            let active_filter = st
-                .active_filter_idx
-                .and_then(|idx| st.options.filters.get(idx));
+            let (filtered_entries, mode) = {
+                let st = state.borrow();
+                let show_hidden = st.show_hidden;
+                let query = st.search_query.to_lowercase();
+                let active_filter = st
+                    .active_filter_idx
+                    .and_then(|idx| st.options.filters.get(idx));
+                let mode = st.options.mode;
 
-            let mut filtered_entries: Vec<FileEntry> = st
-                .all_entries
-                .iter()
-                .filter(|e| {
-                    if !show_hidden && e.is_hidden {
-                        return false;
-                    }
-                    if !query.is_empty() && !e.display_name.to_lowercase().contains(&query) {
-                        return false;
-                    }
-                    if e.file_type != FileType::Directory {
-                        if st.options.mode == FileDialogMode::OpenFolder {
+                let mut entries: Vec<FileEntry> = st
+                    .all_entries
+                    .iter()
+                    .filter(|e| {
+                        if !show_hidden && e.is_hidden {
                             return false;
                         }
-                        if let Some(filter) = active_filter {
-                            if !matches_filter(&e.path, filter) {
+                        if !query.is_empty() && !e.display_name.to_lowercase().contains(&query) {
+                            return false;
+                        }
+                        if e.file_type != FileType::Directory {
+                            if mode == FileDialogMode::OpenFolder {
                                 return false;
                             }
+                            if let Some(filter) = active_filter {
+                                if !matches_filter(&e.path, filter) {
+                                    return false;
+                                }
+                            }
                         }
-                    }
-                    true
-                })
-                .cloned()
-                .collect();
+                        true
+                    })
+                    .cloned()
+                    .collect();
 
-            filtered_entries.sort_by(|a, b| {
-                let a_dir = a.file_type == FileType::Directory;
-                let b_dir = b.file_type == FileType::Directory;
-                if a_dir && !b_dir {
-                    std::cmp::Ordering::Less
-                } else if !a_dir && b_dir {
-                    std::cmp::Ordering::Greater
-                } else {
-                    a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase())
-                }
-            });
+                entries.sort_by(|a, b| {
+                    let a_dir = a.file_type == FileType::Directory;
+                    let b_dir = b.file_type == FileType::Directory;
+                    if a_dir && !b_dir {
+                        std::cmp::Ordering::Less
+                    } else if !a_dir && b_dir {
+                        std::cmp::Ordering::Greater
+                    } else {
+                        a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase())
+                    }
+                });
+
+                (entries, mode)
+            };
+
+            state.borrow_mut().current_displayed_entries = filtered_entries.clone();
 
             if filtered_entries.is_empty() {
                 let empty_row = ListBoxRow::new();
@@ -540,7 +547,7 @@ pub fn show_file_chooser_dialog(
                 let click_gesture = GestureClick::new();
                 let entry_path = entry.path.clone();
                 let nav = navigate_to.clone();
-                let is_open_file = state.borrow().options.mode == FileDialogMode::OpenFile;
+                let is_open_file = mode == FileDialogMode::OpenFile;
                 let win = window.clone();
                 let on_sel = on_selected_cb.clone();
 
@@ -571,38 +578,12 @@ pub fn show_file_chooser_dialog(
         list_box.connect_row_selected(move |_, row| {
             if let Some(r) = row {
                 let idx = r.index() as usize;
-                let st = state.borrow();
-                let show_hidden = st.show_hidden;
-                let query = st.search_query.to_lowercase();
-                let active_filter = st
-                    .active_filter_idx
-                    .and_then(|i| st.options.filters.get(i));
+                let target_entry = {
+                    let st = state.borrow();
+                    st.current_displayed_entries.get(idx).cloned()
+                };
 
-                let filtered: Vec<&FileEntry> = st
-                    .all_entries
-                    .iter()
-                    .filter(|e| {
-                        if !show_hidden && e.is_hidden {
-                            return false;
-                        }
-                        if !query.is_empty() && !e.display_name.to_lowercase().contains(&query) {
-                            return false;
-                        }
-                        if e.file_type != FileType::Directory {
-                            if st.options.mode == FileDialogMode::OpenFolder {
-                                return false;
-                            }
-                            if let Some(filter) = active_filter {
-                                if !matches_filter(&e.path, filter) {
-                                    return false;
-                                }
-                            }
-                        }
-                        true
-                    })
-                    .collect();
-
-                if let Some(entry) = filtered.get(idx) {
+                if let Some(entry) = target_entry {
                     state.borrow_mut().selected_paths = vec![entry.path.clone()];
                     file_name_entry.set_text(&entry.display_name);
                 }
@@ -615,7 +596,8 @@ pub fn show_file_chooser_dialog(
         let state = state.clone();
         let nav = navigate_to.clone();
         move |_| {
-            if let Some(prev) = state.borrow_mut().history_back.pop() {
+            let prev_opt = state.borrow_mut().history_back.pop();
+            if let Some(prev) = prev_opt {
                 let cur = state.borrow().current_path.clone();
                 state.borrow_mut().history_forward.push(cur);
                 nav(prev, false);
@@ -628,7 +610,8 @@ pub fn show_file_chooser_dialog(
         let state = state.clone();
         let nav = navigate_to.clone();
         move |_| {
-            if let Some(next) = state.borrow_mut().history_forward.pop() {
+            let next_opt = state.borrow_mut().history_forward.pop();
+            if let Some(next) = next_opt {
                 let cur = state.borrow().current_path.clone();
                 state.borrow_mut().history_back.push(cur);
                 nav(next, false);
@@ -713,44 +696,46 @@ pub fn show_file_chooser_dialog(
         let window = window.clone();
 
         Rc::new(move || {
-            let st = state.borrow();
-            let cur_path = st.current_path.clone();
-            let mode = st.options.mode;
-            let typed_name = file_name_entry.text().trim().to_string();
+            let final_paths = {
+                let st = state.borrow();
+                let cur_path = st.current_path.clone();
+                let mode = st.options.mode;
+                let typed_name = file_name_entry.text().trim().to_string();
 
-            let final_paths = match mode {
-                FileDialogMode::OpenFolder => {
-                    if !st.selected_paths.is_empty() && st.selected_paths[0].is_dir() {
-                        st.selected_paths.clone()
-                    } else {
-                        vec![cur_path]
+                match mode {
+                    FileDialogMode::OpenFolder => {
+                        if !st.selected_paths.is_empty() && st.selected_paths[0].is_dir() {
+                            st.selected_paths.clone()
+                        } else {
+                            vec![cur_path]
+                        }
                     }
-                }
-                FileDialogMode::SaveFile => {
-                    if typed_name.is_empty() {
-                        return;
+                    FileDialogMode::SaveFile => {
+                        if typed_name.is_empty() {
+                            return;
+                        }
+                        vec![cur_path.join(typed_name)]
                     }
-                    vec![cur_path.join(typed_name)]
-                }
-                FileDialogMode::OpenFile => {
-                    if !st.selected_paths.is_empty() {
-                        st.selected_paths.clone()
-                    } else if !typed_name.is_empty() {
-                        let candidate = cur_path.join(&typed_name);
-                        if candidate.exists() {
-                            vec![candidate]
+                    FileDialogMode::OpenFile => {
+                        if !st.selected_paths.is_empty() {
+                            st.selected_paths.clone()
+                        } else if !typed_name.is_empty() {
+                            let candidate = cur_path.join(&typed_name);
+                            if candidate.exists() {
+                                vec![candidate]
+                            } else {
+                                return;
+                            }
                         } else {
                             return;
                         }
-                    } else {
-                        return;
                     }
-                }
-                FileDialogMode::OpenMultipleFiles => {
-                    if !st.selected_paths.is_empty() {
-                        st.selected_paths.clone()
-                    } else {
-                        return;
+                    FileDialogMode::OpenMultipleFiles => {
+                        if !st.selected_paths.is_empty() {
+                            st.selected_paths.clone()
+                        } else {
+                            return;
+                        }
                     }
                 }
             };
@@ -816,7 +801,8 @@ pub fn show_file_chooser_dialog(
     }
     window.add_controller(key_controller);
 
-    navigate_to(state.borrow().current_path.clone(), false);
+    let init_path = state.borrow().current_path.clone();
+    navigate_to(init_path, false);
 
     window.present();
 }
