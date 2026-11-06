@@ -37,7 +37,7 @@ impl FileFilter {
     /// Creates a new filter matching all files (`*.*`).
     pub fn all_files() -> Self {
         Self {
-            name: "All Files (*.*)".to_string(),
+            name: crate::i18n::trans("file_dialog.all_files"),
             patterns: vec!["*.*".to_string(), "*".to_string()],
             mime_types: Vec::new(),
         }

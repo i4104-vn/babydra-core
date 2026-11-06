@@ -15,6 +15,7 @@ use gtk4::{
     ListBoxRow, Orientation, ScrolledWindow, StringList, Window,
 };
 
+use babydra_core::i18n::trans;
 use babydra_core::models::explore::file_entry::{FileEntry, FileType};
 use babydra_core::services::file_dialog::{
     get_default_places, matches_filter, FileDialogMode, FileDialogOptions,
@@ -100,7 +101,8 @@ pub fn show_file_chooser_dialog(
     title_lbl.set_hexpand(true);
     header_bar.append(&title_lbl);
 
-    let btn_cancel_top = Button::with_label("Cancel");
+    let cancel_label = trans("file_dialog.btn_cancel");
+    let btn_cancel_top = Button::with_label(&cancel_label);
     btn_cancel_top.add_css_class("modern-dialog-cancel-btn");
     btn_cancel_top.set_cursor_from_name(Some("pointer"));
     header_bar.append(&btn_cancel_top);
@@ -111,9 +113,9 @@ pub fn show_file_chooser_dialog(
         .accept_label
         .clone()
         .unwrap_or_else(|| match state.borrow().options.mode {
-            FileDialogMode::OpenFile | FileDialogMode::OpenMultipleFiles => "Open".to_string(),
-            FileDialogMode::OpenFolder => "Select".to_string(),
-            FileDialogMode::SaveFile => "Save".to_string(),
+            FileDialogMode::OpenFile | FileDialogMode::OpenMultipleFiles => trans("file_dialog.btn_open"),
+            FileDialogMode::OpenFolder => trans("file_dialog.btn_select"),
+            FileDialogMode::SaveFile => trans("file_dialog.btn_save"),
         });
 
     let btn_confirm_top = Button::with_label(&confirm_label);
@@ -134,19 +136,19 @@ pub fn show_file_chooser_dialog(
     btn_back.set_child(Some(&get_icon("arrow-left", 16)));
     btn_back.add_css_class("flat");
     btn_back.add_css_class("nav-btn");
-    btn_back.set_tooltip_text(Some("Back"));
+    btn_back.set_tooltip_text(Some(&trans("file_dialog.tooltip_back")));
 
     let btn_forward = Button::new();
     btn_forward.set_child(Some(&get_icon("arrow-right", 16)));
     btn_forward.add_css_class("flat");
     btn_forward.add_css_class("nav-btn");
-    btn_forward.set_tooltip_text(Some("Forward"));
+    btn_forward.set_tooltip_text(Some(&trans("file_dialog.tooltip_forward")));
 
     let btn_up = Button::new();
     btn_up.set_child(Some(&get_icon("arrow-up", 16)));
     btn_up.add_css_class("flat");
     btn_up.add_css_class("nav-btn");
-    btn_up.set_tooltip_text(Some("Parent Directory"));
+    btn_up.set_tooltip_text(Some(&trans("file_dialog.tooltip_up")));
 
     nav_row.append(&btn_back);
     nav_row.append(&btn_forward);
@@ -161,7 +163,7 @@ pub fn show_file_chooser_dialog(
 
     // Search input
     let search_entry = Entry::new();
-    search_entry.set_placeholder_text(Some("Search files..."));
+    search_entry.set_placeholder_text(Some(&trans("file_dialog.search_placeholder")));
     search_entry.add_css_class("file-chooser-search");
     search_entry.set_width_request(160);
     nav_row.append(&search_entry);
@@ -171,7 +173,7 @@ pub fn show_file_chooser_dialog(
     btn_hidden.set_child(Some(&get_icon("eye", 16)));
     btn_hidden.add_css_class("flat");
     btn_hidden.add_css_class("nav-btn");
-    btn_hidden.set_tooltip_text(Some("Toggle hidden files (Ctrl+H)"));
+    btn_hidden.set_tooltip_text(Some(&trans("file_dialog.tooltip_toggle_hidden")));
     nav_row.append(&btn_hidden);
 
     // New Folder button
@@ -179,7 +181,7 @@ pub fn show_file_chooser_dialog(
     btn_new_folder.set_child(Some(&get_icon("folder-new", 16)));
     btn_new_folder.add_css_class("flat");
     btn_new_folder.add_css_class("nav-btn");
-    btn_new_folder.set_tooltip_text(Some("New Folder"));
+    btn_new_folder.set_tooltip_text(Some(&trans("file_dialog.tooltip_new_folder")));
     nav_row.append(&btn_new_folder);
 
     root_vbox.append(&nav_row);
@@ -229,11 +231,12 @@ pub fn show_file_chooser_dialog(
     bottom_bar.set_margin_top(10);
     bottom_bar.set_margin_bottom(12);
 
-    let file_lbl = Label::new(Some(if state.borrow().options.mode == FileDialogMode::OpenFolder {
-        "Folder:"
+    let file_lbl_text = if state.borrow().options.mode == FileDialogMode::OpenFolder {
+        trans("file_dialog.title_open_folder")
     } else {
-        "File name:"
-    }));
+        trans("file_dialog.lbl_file_name")
+    };
+    let file_lbl = Label::new(Some(&file_lbl_text));
     file_lbl.add_css_class("file-chooser-bottom-lbl");
     bottom_bar.append(&file_lbl);
 
@@ -259,7 +262,7 @@ pub fn show_file_chooser_dialog(
         bottom_bar.append(&filter_dropdown);
     }
 
-    let btn_cancel_bottom = Button::with_label("Cancel");
+    let btn_cancel_bottom = Button::with_label(&cancel_label);
     btn_cancel_bottom.add_css_class("modern-dialog-cancel-btn");
     btn_cancel_bottom.set_cursor_from_name(Some("pointer"));
     bottom_bar.append(&btn_cancel_bottom);
@@ -275,7 +278,7 @@ pub fn show_file_chooser_dialog(
     let places = get_default_places();
     let sidebar_buttons: Rc<RefCell<Vec<(PathBuf, Button)>>> = Rc::new(RefCell::new(Vec::new()));
 
-    let places_lbl = Label::new(Some("Places"));
+    let places_lbl = Label::new(Some(&trans("file_dialog.places_title")));
     places_lbl.add_css_class("file-chooser-sidebar-header");
     places_lbl.set_halign(Align::Start);
     places_lbl.set_margin_top(4);
@@ -472,6 +475,18 @@ pub fn show_file_chooser_dialog(
                 }
             });
 
+            if filtered_entries.is_empty() {
+                let empty_row = ListBoxRow::new();
+                empty_row.set_selectable(false);
+                empty_row.set_activatable(false);
+                let empty_lbl = Label::new(Some(&trans("file_dialog.empty_folder")));
+                empty_lbl.add_css_class("file-chooser-empty");
+                empty_lbl.set_margin_top(32);
+                empty_lbl.set_margin_bottom(32);
+                empty_row.set_child(Some(&empty_lbl));
+                list_box.append(&empty_row);
+            }
+
             for entry in filtered_entries {
                 let row = ListBoxRow::new();
                 row.add_css_class("file-chooser-row");
@@ -664,11 +679,12 @@ pub fn show_file_chooser_dialog(
         let nav = navigate_to.clone();
         move |_| {
             let cur_dir = state.borrow().current_path.clone();
-            let mut name = "New Folder".to_string();
+            let base_name = trans("file_dialog.new_folder_title");
+            let mut name = base_name.clone();
             let mut count = 1;
             while cur_dir.join(&name).exists() {
                 count += 1;
-                name = format!("New Folder {}", count);
+                name = format!("{} {}", base_name, count);
             }
             let target = cur_dir.join(&name);
             if std::fs::create_dir(&target).is_ok() {

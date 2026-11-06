@@ -134,6 +134,7 @@ fn load_en_map() -> HashMap<String, String> {
     parse_locale_map(include_str!("locales/greeter/en.json"), &mut map);
     parse_locale_map(include_str!("locales/desktop/en.json"), &mut map);
     parse_locale_map(include_str!("locales/recorder/en.json"), &mut map);
+    parse_locale_map(include_str!("locales/file_dialog/en.json"), &mut map);
     map
 }
 
@@ -146,6 +147,7 @@ fn load_vi_map() -> HashMap<String, String> {
     parse_locale_map(include_str!("locales/greeter/vi.json"), &mut map);
     parse_locale_map(include_str!("locales/desktop/vi.json"), &mut map);
     parse_locale_map(include_str!("locales/recorder/vi.json"), &mut map);
+    parse_locale_map(include_str!("locales/file_dialog/vi.json"), &mut map);
     map
 }
 
